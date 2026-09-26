@@ -1,150 +1,167 @@
-%% Figure 2.3: finite-domain level curves for different dish radii
-% Panel group (a) uses the Dirac delta initial condition and panel group (b)
-% uses the Heaviside initial condition.
+%% Figure 2.3: comparison of antimicrobial MIC level curves
+% This script compares the antimicrobial inhibition boundary for four
+% combinations of initial condition and spatial domain:
 %
-% This script is self-contained. Running it produces Figure_2_3.pdf in the
-% outputs folder alongside this file.
+%   1. Dirac delta initial condition on an infinite domain
+%   2. Heaviside initial condition on an infinite domain
+%   3. Dirac delta initial condition on a finite domain
+%   4. Heaviside initial condition on a finite domain
+%
+% In each case, the plotted curve is the level set a(r,t) = a_MIC. The
+% maximum inhibition radius and corresponding stopping time are also
+% identified for the two infinite-domain solutions.
+%
+% Running this script produces:
+%   outputs/Figure_2_3.pdf
 
 clear; close all; clc;
 
 %% Parameters
-
 aMIC = 0.02;
-RdValues = [3 4 5 6];
-RdCritical = 1/sqrt(pi*aMIC);
-
-Nterms = 4000;
+Rd = 7;
 Nr = 320;
-NtEarly = 180;
-NtLate = 260;
-tMin = 1e-4;
-tMid = 0.25;
+Nt = 360;
+Nterms = 4000;
+Nl = 240;
+tMin = 1e-3;
 tMax = 5;
-chunkSize = 250;
 
-t = unique([linspace(tMin,tMid,NtEarly),linspace(tMid,tMax,NtLate)]);
+r = linspace(0,Rd,Nr);
+% Extra resolution at early times without making the plotted grid irregular.
+t = unique([logspace(log10(tMin),log10(0.25),140), ...
+            linspace(0.25,tMax,Nt)]);
+[R,T] = meshgrid(r,t);
 
-%% Bessel data used by both initial conditions
-
+%% Neumann eigenvalues
 alpha = besselj1_zeros(Nterms);
-J0alpha = besselj(0,alpha);
+
+%% Case 1: Dirac delta initial condition, infinite domain
+A1 = (1./(4*pi*T)).*exp(-(R.^2)./(4*T));
+
+%% Case 2: Heaviside initial condition, infinite domain
+lq = linspace(0,1,Nl);
+A2 = zeros(size(R));
+
+for it = 1:numel(t)
+    tt = t(it);
+    RR = r(:);
+    LL = lq(:).';
+    z = (RR.*LL)./(2*tt);
+
+    % besseli(0,z,1) = exp(-abs(z))*besseli(0,z). Since z >= 0,
+    % this is algebraically identical to the original integrand but stable.
+    integrand = (1/pi).*(LL./(2*tt)) ...
+        .* exp(-((RR-LL).^2)./(4*tt)) ...
+        .* besseli(0,z,1);
+
+    A2(it,:) = trapz(lq,integrand,2);
+end
+
+%% Case 3: Dirac delta initial condition, finite domain
+A3 = (1/(pi*Rd^2))*ones(size(R));
+for n = 1:Nterms
+    an = alpha(n);
+    modeR = besselj(0,an*r/Rd);
+    modeT = exp(-(an^2)*t(:)/Rd^2);
+    A3 = A3 + (1/(pi*Rd^2))*(1/besselj(0,an)^2) ...
+        *(modeT*modeR);
+end
+
+%% Case 4: Heaviside initial condition, finite domain
+A4 = (1/(pi*Rd^2))*ones(size(R));
+for n = 1:Nterms
+    an = alpha(n);
+    coefficient = (1/(pi*Rd))*(2/(an*besselj(0,an)^2)) ...
+        *besselj(1,an/Rd);
+    modeR = besselj(0,an*r/Rd);
+    modeT = exp(-(an^2)*t(:)/Rd^2);
+    A4 = A4 + coefficient*(modeT*modeR);
+end
+
+%% Infinite-domain turning points
+rZDirac = 1/sqrt(exp(1)*pi*aMIC);
+tZDirac = 1/(4*exp(1)*pi*aMIC);
+
+% Solve the Heaviside level and turning-point conditions simultaneously.
+% Log variables enforce r_Z > 0 and t_Z > 0.
+options = optimoptions('fsolve','Display','none', ...
+    'FunctionTolerance',1e-12,'StepTolerance',1e-12, ...
+    'OptimalityTolerance',1e-12);
+logRT = fsolve(@(x) heaviside_turning_system(x,aMIC), ...
+    log([rZDirac;tZDirac]),options);
+rZHeaviside = exp(logRT(1));
+tZHeaviside = exp(logRT(2));
+
+fprintf('Dirac infinite domain:     r_Z = %.9f, t_Z = %.9f\n', ...
+    rZDirac,tZDirac);
+fprintf('Heaviside infinite domain: r_Z = %.9f, t_Z = %.9f\n', ...
+    rZHeaviside,tZHeaviside);
 
 %% Plot
+fig = figure('Color','w','Units','centimeters','Position',[2 2 18 12]);
+ax = axes(fig);
+hold(ax,'on'); box(ax,'on'); grid(ax,'on');
+set(ax,'FontName','Times','FontSize',12,'LineWidth',0.9, ...
+    'TickLabelInterpreter','latex');
 
-fig = figure('Color','w','Units','centimeters','Position',[2 2 18 23]);
-tl = tiledlayout(fig,4,2,'TileSpacing','compact','Padding','compact');
+[~,h1] = contour(ax,R,T,A1,[aMIC aMIC], ...
+    'LineWidth',2,'Color','blue','LineStyle','-');
+[~,h2] = contour(ax,R,T,A2,[aMIC aMIC], ...
+    'LineWidth',2,'Color','magenta','LineStyle','-');
+[~,h3] = contour(ax,R,T,A3,[aMIC aMIC], ...
+    'LineWidth',2,'Color','red','LineStyle','--');
+[~,h4] = contour(ax,R,T,A4,[aMIC aMIC], ...
+    'LineWidth',2,'Color','green','LineStyle','--');
 
-for j = 1:numel(RdValues)
-    Rd = RdValues(j);
-    r = linspace(0,Rd,Nr);
-    A = dirac_finite_grid(r,t,Rd,alpha,J0alpha,chunkSize);
+p1 = plot(ax,rZDirac,tZDirac,'o','MarkerSize',9, ...
+    'MarkerFaceColor','blue','MarkerEdgeColor','k','LineWidth',1.5);
+p2 = plot(ax,rZHeaviside,tZHeaviside,'d','MarkerSize',9, ...
+    'MarkerFaceColor','magenta','MarkerEdgeColor','k','LineWidth',1.5);
 
-    ax = nexttile(tl,j);
-    contour(ax,r,t,A.',[aMIC aMIC], ...
-        'LineWidth',1.5,'Color','red');
-    format_panel(ax,Rd,tMax);
-end
+text(ax,rZDirac+0.08,tZDirac+0.08, ...
+    sprintf('$r_Z=%.4f,\\;t_Z=%.4f$',rZDirac,tZDirac), ...
+    'Interpreter','latex','FontSize',10,'BackgroundColor','w','Margin',2);
+text(ax,rZHeaviside+0.08,tZHeaviside-0.18, ...
+    sprintf('$r_Z=%.4f,\\;t_Z=%.4f$',rZHeaviside,tZHeaviside), ...
+    'Interpreter','latex','FontSize',10,'BackgroundColor','w','Margin',2);
 
-for j = 1:numel(RdValues)
-    Rd = RdValues(j);
-    r = linspace(0,Rd,Nr);
-    A = heaviside_finite_grid(r,t,Rd,alpha,J0alpha,chunkSize);
-
-    ax = nexttile(tl,j+4);
-    contour(ax,r,t,A.',[aMIC aMIC], ...
-        'LineWidth',1.5,'Color','green');
-    format_panel(ax,Rd,tMax);
-end
-
-annotation(fig,'textbox',[0.48 0.505 0.04 0.03], ...
-    'String','(a)','EdgeColor','none','HorizontalAlignment','center', ...
-    'Interpreter','latex');
-annotation(fig,'textbox',[0.48 0.012 0.04 0.03], ...
-    'String','(b)','EdgeColor','none','HorizontalAlignment','center', ...
-    'Interpreter','latex');
-
-fprintf('Figure 2.3: 1/sqrt(pi*a_MIC) = %.6f\n',RdCritical);
+xlabel(ax,'$r$','Interpreter','latex');
+ylabel(ax,'$t$','Interpreter','latex');
+xlim(ax,[0 3]);
+ylim(ax,[0 tMax]);
+legend(ax,[h1 h2 h3 h4 p1 p2], ...
+    {'Case 1: Dirac delta IC on infinite domain', ...
+     'Case 2: Heaviside IC on infinite domain', ...
+     'Case 3: Dirac delta IC on finite domain', ...
+     'Case 4: Heaviside IC on finite domain', ...
+     'Case 1: $(r_Z,t_Z)$', ...
+     'Case 2: $(r_Z,t_Z)$'}, ...
+    'Location','southwest','FontSize',10,'Interpreter','latex','Box','on');
 
 %% Export
-
 scriptDir = fileparts(mfilename('fullpath'));
 outputDir = fullfile(scriptDir,'outputs');
-if ~exist(outputDir,'dir')
-    mkdir(outputDir);
-end
-
+if ~exist(outputDir,'dir'); mkdir(outputDir); end
 exportgraphics(fig,fullfile(outputDir,'Figure_2_3.pdf'), ...
     'ContentType','vector','Resolution',300);
 
 %% Local functions
+function F = heaviside_turning_system(logRT,aMIC)
+    rZ = exp(logRT(1));
+    tZ = exp(logRT(2));
+    z = rZ/(2*tZ);
 
-function A = dirac_finite_grid(r,t,Rd,alpha,J0alpha,chunkSize)
-% Fourier--Bessel series for the finite-domain Dirac solution.
-% The sum is evaluated in blocks to avoid forming a large 3-D array.
-
-A = ones(numel(r),numel(t))/(pi*Rd^2);
-
-for first = 1:chunkSize:numel(alpha)
-    last = min(first+chunkSize-1,numel(alpha));
-    a = alpha(first:last).';
-    weights = 1./(J0alpha(first:last).'.^2);
-
-    radialModes = besselj(0,r(:)*a/Rd);
-    timeModes = exp(-t(:)*(a.^2)/Rd^2);
-
-    A = A + ((radialModes.*weights)*timeModes.')/(pi*Rd^2);
-end
-end
-
-function A = heaviside_finite_grid(r,t,Rd,alpha,J0alpha,chunkSize)
-% Fourier--Bessel series for the finite-domain Heaviside solution.
-
-A = ones(numel(r),numel(t))/(pi*Rd^2);
-
-for first = 1:chunkSize:numel(alpha)
-    last = min(first+chunkSize-1,numel(alpha));
-    a = alpha(first:last).';
-    J0 = J0alpha(first:last).';
-
-    coefficients = (2./(a.*J0.^2)).*besselj(1,a/Rd);
-    radialModes = besselj(0,r(:)*a/Rd);
-    timeModes = exp(-t(:)*(a.^2)/Rd^2);
-
-    A = A + ((radialModes.*coefficients)*timeModes.')/(pi*Rd);
-end
+    % a_H(r,t) = pi^{-1}[1-Q_1(r/sqrt(2t),1/sqrt(2t))].
+    levelResidual = (1/pi)*(1-marcumq( ...
+        rZ/sqrt(2*tZ),1/sqrt(2*tZ))) - aMIC;
+    turningResidual = rZ*besseli(1,z,1)-besseli(0,z,1);
+    F = [levelResidual;turningResidual];
 end
 
 function z = besselj1_zeros(N)
-% First N positive zeros of J_1.
-
-z = zeros(N,1);
-for k = 1:N
-    x0 = (k+0.25)*pi;
-    left = x0-pi/3;
-    right = x0+pi/3;
-
-    % Expand the bracket in the unlikely event that the asymptotic guess
-    % does not straddle a zero.
-    attempts = 0;
-    while sign(besselj(1,left)) == sign(besselj(1,right)) && attempts < 8
-        left = left-pi/6;
-        right = right+pi/6;
-        attempts = attempts+1;
+    z = zeros(N,1);
+    for k = 1:N
+        x0 = (k+0.25)*pi;
+        z(k) = fzero(@(x)besselj(1,x),[x0-pi/3,x0+pi/3]);
     end
-
-    z(k) = fzero(@(x)besselj(1,x),[left right]);
-end
-end
-
-function format_panel(ax,Rd,tMax)
-
-box(ax,'on');
-grid(ax,'on');
-set(ax,'FontName','Times','FontSize',11,'LineWidth',0.9, ...
-    'TickLabelInterpreter','latex');
-title(ax,sprintf('$R_d=%g$',Rd),'Interpreter','latex');
-xlabel(ax,'$r$','Interpreter','latex');
-ylabel(ax,'$t$','Interpreter','latex');
-xlim(ax,[0 Rd]);
-ylim(ax,[0 tMax]);
 end

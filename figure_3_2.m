@@ -1,159 +1,195 @@
-%% Figure 3.2: bacterial density profiles for different death rates
-% Both panels are evaluated at 2t_Z. The left panel uses the Dirac delta
-% initial condition and the right panel uses the Heaviside initial condition.
+%% Figure 3.2: error in the measured zone-of-inhibition radius
+% This script quantifies the difference between the ideal antimicrobial
+% inhibition boundary and the radius that would be inferred from a chosen
+% bacterial-density threshold.
 %
-% This script is self-contained. Running it produces Figure_3_2.pdf in the
-% outputs folder alongside this file.
+% The relative error is expressed as a percentage of the ideal
+% zone-of-inhibition radius.
+%
+% Figure 3.2a shows the error over time for several values of the bacterial
+% death-rate parameter k at a fixed bacterial-density threshold beta.
+%
+% Figure 3.2b shows the error over time for several values of beta at a
+% fixed value of k.
+%
+% Running this script produces:
+%   outputs/Figure_3_2a.pdf
+%   outputs/Figure_3_2b.pdf
 
 clear; close all; clc;
 
 %% Parameters
-
-rMax = 10;
 rZ = 4;
-Nr = 800;
-r = linspace(0,rMax,Nr);
-r(1) = 1e-6;
-b0 = double(r >= 1);
+aMIC = 1/(exp(1)*pi*rZ^2);
+tZ = rZ^2/4;
+timeFractions = linspace(0,3,800);
+times = timeFractions*tZ;
 
-kValues = [1 10 50 100];
-timeFactor = 2;
+betaFixed = 0.5;
+kVals = [1 10 50 100 1000];
+kFixed = 50;
+betaVals = [0.25 0.50 0.75 0.90];
 
-%% Stopping times and threshold concentrations
+%% Ideal beta = 1 inhibition boundary
+r1 = arrayfun(@(tj)r_beta(tj,1,1,aMIC,rZ,tZ),times);
 
-aDirac = @(r,t) (1./(4*pi*t)).*exp(-(r.^2)./(4*t));
+%% Relative percentage error for varying k
+errorK = zeros(numel(kVals),numel(times));
+for i = 1:numel(kVals)
+    for j = 1:numel(times)
+        rb = r_beta(times(j),betaFixed,kVals(i),aMIC,rZ,tZ);
+        errorK(i,j) = 100*(r1(j)-rb)/r1(j);
+    end
+end
 
-tZDirac = rZ^2/4;
+%% Relative percentage error for varying beta
+errorBeta = zeros(numel(betaVals),numel(times));
+for i = 1:numel(betaVals)
+    for j = 1:numel(times)
+        rb = r_beta(times(j),betaVals(i),kFixed,aMIC,rZ,tZ);
+        errorBeta(i,j) = 100*(r1(j)-rb)/r1(j);
+    end
+end
 
-g = @(y) rZ*besseli(1,rZ./(2*exp(y))) ...
-    - besseli(0,rZ./(2*exp(y)));
-options = optimoptions('fsolve','Display','none', ...
-    'FunctionTolerance',1e-12,'StepTolerance',1e-12);
-tZHeaviside = exp(fsolve(g,log(tZDirac),options));
+for i = 1:numel(kVals)
+    [peakError,idx] = max(errorK(i,:));
+    fprintf(['k = %g: E(3t_Z) = %.6f%%, max E = %.6f%% ', ...
+        'at t/t_Z = %.4f\n'],kVals(i),errorK(i,end), ...
+        peakError,timeFractions(idx));
+end
 
-aMICDirac = aDirac(rZ,tZDirac);
-aMICHeaviside = (1/pi)*(1-marcumq( ...
-    rZ/sqrt(2*tZHeaviside),1/sqrt(2*tZHeaviside)));
-
-tFixedDirac = timeFactor*tZDirac;
-tFixedHeaviside = timeFactor*tZHeaviside;
-
-fprintf('Dirac:     t_Z = %.6f, a_MIC = %.6e\n',tZDirac,aMICDirac);
-fprintf('Heaviside: t_Z = %.6f, a_MIC = %.6e\n', ...
-    tZHeaviside,aMICHeaviside);
-
-%% Plot
-
+%% Plot styles
 styles = { ...
     struct('Color',[0.00 0.45 0.74],'LineStyle','-'), ...
     struct('Color',[0.85 0.33 0.10],'LineStyle','--'), ...
     struct('Color',[0.47 0.67 0.19],'LineStyle','-.'), ...
-    struct('Color',[0.49 0.18 0.56],'LineStyle',':')};
+    struct('Color',[0.49 0.18 0.56],'LineStyle',':'), ...
+    struct('Color',[0.30 0.30 0.30],'LineStyle','-')};
 
-fig = figure('Color','w','Units','centimeters','Position',[2 2 22 9]);
-tl = tiledlayout(fig,1,2,'TileSpacing','compact','Padding','compact');
-
-ax = nexttile(tl);
-hold(ax,'on');
-for j = 1:numel(kValues)
-    bj = b_snapshot(1,aMICDirac,kValues(j),r,tFixedDirac,b0);
-    plot(ax,r,bj,'LineWidth',1.8, ...
-        'Color',styles{j}.Color,'LineStyle',styles{j}.LineStyle);
-end
-format_density_axes(ax,rMax);
-legend(ax,k_labels(kValues),'Interpreter','latex', ...
-    'Location','southeast','FontSize',10,'Box','on');
-
-ax = nexttile(tl);
-hold(ax,'on');
-for j = 1:numel(kValues)
-    bj = b_snapshot(2,aMICHeaviside,kValues(j),r,tFixedHeaviside,b0);
-    plot(ax,r,bj,'LineWidth',1.8, ...
-        'Color',styles{j}.Color,'LineStyle',styles{j}.LineStyle);
-end
-format_density_axes(ax,rMax);
-legend(ax,k_labels(kValues),'Interpreter','latex', ...
-    'Location','southeast','FontSize',10,'Box','on');
-
-%% Export
+errorMax = max([errorK(:);errorBeta(:)]);
+yMax = max(5,1.05*errorMax);
 
 scriptDir = fileparts(mfilename('fullpath'));
 outputDir = fullfile(scriptDir,'outputs');
-if ~exist(outputDir,'dir')
-    mkdir(outputDir);
-end
+if ~exist(outputDir,'dir'); mkdir(outputDir); end
 
-exportgraphics(fig,fullfile(outputDir,'Figure_3_2.pdf'), ...
-    'ContentType','vector','Resolution',300);
+%% Figure 3.2a: varying k
+figA = figure('Color','w','Units','centimeters', ...
+    'Position',[2 2 10.5 8.5],'Renderer','painters');
+ax = axes(figA);
+hold(ax,'on');
+for j = 1:numel(kVals)
+    plot(ax,timeFractions,errorK(j,:),'LineWidth',1.8, ...
+        'Color',styles{j}.Color,'LineStyle',styles{j}.LineStyle);
+end
+format_error_axes(ax,yMax);
+legend(ax,k_labels(kVals),'Interpreter','latex', ...
+    'Location','northeast','FontSize',9,'Box','on');
+exportgraphics(figA,fullfile(outputDir,'Figure_3_2a.pdf'), ...
+    'ContentType','vector');
+
+%% Figure 3.2b: varying beta
+figB = figure('Color','w','Units','centimeters', ...
+    'Position',[2 2 10.5 8.5],'Renderer','painters');
+ax = axes(figB);
+hold(ax,'on');
+for j = 1:numel(betaVals)
+    plot(ax,timeFractions,errorBeta(j,:),'LineWidth',1.8, ...
+        'Color',styles{j}.Color,'LineStyle',styles{j}.LineStyle);
+end
+format_error_axes(ax,yMax);
+legend(ax,beta_labels(betaVals),'Interpreter','latex', ...
+    'Location','northeast','FontSize',10,'Box','on');
+exportgraphics(figB,fullfile(outputDir,'Figure_3_2b.pdf'), ...
+    'ContentType','vector');
 
 %% Local functions
-
-function bj = b_snapshot(kernelIndex,a_min,k,x,tj,b0)
-% Numerical evaluation of the accumulated antimicrobial exposure.
-
-    t0 = 1e-6;
-
-    if tj <= 0
-        bj = b0;
+function rb = r_beta(t,beta,k,aMIC,rZ,tZ)
+    tol = 1e-10;
+    if t <= 0
+        rb = 1;
         return;
     end
 
-    tc = linspace(t0,tj,80);
-    Ac = a_eval(kernelIndex,x,tc);
-
-    if all(Ac <= a_min,'all')
-        bj = b0;
+    if abs(beta-1) < tol
+        if t < tZ
+            q = 4*pi*aMIC*t;
+            if q < 1
+                rFront = sqrt(-4*t*log(q));
+                rb = max(1,min(rFront,rZ));
+            else
+                rb = 1;
+            end
+        else
+            rb = rZ;
+        end
         return;
     end
 
-    tEnd = tc(find(any(Ac > a_min,1),1,'last'));
-    if kernelIndex == 2
-        Nq = 120;
+    rLeft = 1+1e-8;
+    bLeft = b_dirac(rLeft,t,k,aMIC,rZ);
+    if bLeft >= beta
+        rb = 1;
+        return;
+    end
+
+    rRight = rZ;
+    f = @(x)b_dirac(x,t,k,aMIC,rZ)-beta;
+    fLeft = f(rLeft);
+    fRight = f(rRight);
+    if abs(fLeft) < tol
+        rb = rLeft;
+    elseif abs(fRight) < tol
+        rb = rRight;
+    elseif fLeft*fRight > 0
+        error(['Unable to bracket r_beta at t = %.6g, k = %.6g, ', ...
+            'beta = %.6g. f(1+) = %.6e, f(r_Z) = %.6e.'], ...
+            t,k,beta,fLeft,fRight);
     else
-        Nq = 250;
-    end
-
-    tq = linspace(t0,tEnd,Nq);
-    A = a_eval(kernelIndex,x,tq);
-
-    exposure = trapz(tq,A.*(A > a_min),2);
-    bj = (b0(:).*exp(-k*exposure)).';
-end
-
-function A = a_eval(kernelIndex,x,t)
-
-    X = x(:);
-    T = t(:).';
-
-    switch kernelIndex
-        case 1
-            A = (1./(4*pi*T)).*exp(-(X.^2)./(4*T));
-
-        case 2
-            A = (1/pi)*(1-marcumq( ...
-                X./sqrt(2*T),ones(numel(X),1)./sqrt(2*T)));
-
-        otherwise
-            error('Unknown kernelIndex.');
+        rb = fzero(f,[rLeft rRight]);
     end
 end
 
-function labels = k_labels(kValues)
+function b = b_dirac(r,t,k,aMIC,rZ)
+    if t <= 0 || r >= rZ
+        b = 1;
+        return;
+    end
 
-labels = cell(size(kValues));
-for j = 1:numel(kValues)
-    labels{j} = sprintf('$k=%g$',kValues(j));
+    z = -pi*aMIC*r^2;
+    Wm1 = double(lambertw(-1,z));
+    W0 = double(lambertw(0,z));
+    tMinus = -r^2/(4*Wm1);
+    tPlus = -r^2/(4*W0);
+    Ei = @(x)-expint(-x);
+
+    if t < tMinus
+        b = 1;
+    elseif t <= tPlus
+        exposure = Ei(Wm1)-Ei(-r^2/(4*t));
+        b = exp(-k*exposure/(4*pi));
+    else
+        exposure = Ei(Wm1)-Ei(W0);
+        b = exp(-k*exposure/(4*pi));
+    end
 end
+
+function labels = k_labels(kVals)
+    labels = arrayfun(@(x)sprintf('$k=%g$',x),kVals, ...
+        'UniformOutput',false);
 end
 
-function format_density_axes(ax,rMax)
+function labels = beta_labels(betaVals)
+    labels = arrayfun(@(x)sprintf('$\\beta=%.2f$',x),betaVals, ...
+        'UniformOutput',false);
+end
 
-box(ax,'on');
-grid(ax,'on');
-set(ax,'FontName','Times','FontSize',11,'LineWidth',0.9, ...
-    'TickLabelInterpreter','latex');
-xlabel(ax,'$r$','Interpreter','latex');
-ylabel(ax,'$b(r,t)$','Interpreter','latex');
-xlim(ax,[0 rMax]);
-ylim(ax,[-0.05 1.05]);
+function format_error_axes(ax,yMax)
+    box(ax,'on'); grid(ax,'on');
+    set(ax,'FontName','Times','FontSize',11,'LineWidth',0.9, ...
+        'TickLabelInterpreter','latex');
+    xlabel(ax,'$t/t_Z$','Interpreter','latex');
+    ylabel(ax,'Relative ZOI error (\%)','Interpreter','latex');
+    xlim(ax,[0 3]);
+    ylim(ax,[0 yMax]);
 end

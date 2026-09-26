@@ -1,9 +1,25 @@
-%% Figure 4.2: meropenem data and fitted model prediction
-% This script contains the data, fitting, combined uncertainty sampling and
-% plotting code needed for Figure 4.2.
+%% Figure 4.2: sensitivity of model predictions to experimental parameters
+% This script investigates how uncertainty in model and experimental
+% parameters affects the predicted relationship between minimum inhibitory
+% concentration (MIC) and zone-of-inhibition radius.
+%
+% Figure 4.2a presents the sensitivity analysis for the meropenem data.
+% Figure 4.2b presents the corresponding analysis for the ciprofloxacin
+% data.
+%
+% For each antimicrobial, the effective diffusivity is first fitted to the
+% experimental data. The model is then evaluated while varying selected
+% parameters individually, including antimicrobial diffusivity,
+% observation time, and effective antimicrobial loading. Prediction bands
+% show the resulting range of model behaviour.
+%
+% Running this script produces:
+%   outputs/Figure_4_2a.pdf
+%   outputs/Figure_4_2b.pdf
 
 clear; close all; clc;
 
+%% Figure 4.2a: meropenem
 % rng(10) for reproducibility
 rng(10);
 
@@ -47,7 +63,7 @@ mer_pseudomonas = [
     0.0625  30.0;
     0.25    29.5;
     0.25    30.0;
-    0.625   30.5;
+    0.0625   30.5;
     1       29.0;
     2       24.5;
     1       29.5;
@@ -103,88 +119,274 @@ mer_data.group = [repmat("Pseudomonas",size(mer_pseudomonas,1),1); ...
 cfg.D0_mm2_min = D_fit;
 cfg.D_sensitivity_range_mm2_min = [0.5 1.5]*D_fit;
 
-%% Model curve and uncertainty band
+fprintf('Figure 4.2a: fitted meropenem D_a* = %.7f mm^2/min\n',D_fit);
+fprintf('Figure 4.2a: SSE = %.6g\n',sse_fit);
+
+%% Sensitivity panels
 
 amin_grid = make_amin_grid(mer_data.MIC,cfg.Ncurve);
 ygrid = log10(amin_grid);
 yexp = log10(mer_data.MIC);
-dose_ref_ug = cfg.dose_ug*cfg.reference_loading_factor;
+D0 = cfg.D0_mm2_min;
+t0_min = 60*cfg.tobs0_hr;
+sensitivity = make_sensitivity_definitions(cfg);
 
-[~,r_fix,r_stop,use_fix,use_stop,amincrit] = ...
-    combined_curve_physical(amin_grid,dose_ref_ug,cfg.agar_depth_mm, ...
-    cfg.D0_mm2_min,60*cfg.tobs0_hr);
+fig = figure('Color','w','Units','centimeters','Position',[2 2 27 9]);
+tl = tiledlayout(fig,1,3,'TileSpacing','compact','Padding','compact');
 
-R_all = sample_prediction_curves(cfg,amin_grid);
-r_lo = prctile(R_all,cfg.ribbon_lo_pct,2);
-r_hi = prctile(R_all,cfg.ribbon_hi_pct,2);
+for p = 1:numel(sensitivity)
+    [R_all,r_fix,r_stop,use_fix,use_stop] = ...
+        sample_one_parameter_curves(cfg,amin_grid,sensitivity(p),D0,t0_min);
 
-%% Plot
+    r_lo = prctile(R_all,cfg.ribbon_lo_pct,2);
+    r_hi = prctile(R_all,cfg.ribbon_hi_pct,2);
 
-fig = figure('Color','w','Units','centimeters','Position',[2 2 22 16]);
-ax = axes(fig);
-hold(ax,'on'); box(ax,'on'); grid(ax,'on');
-set(ax,'FontName','Times','FontSize',12,'LineWidth',0.9, ...
-    'TickLabelInterpreter','latex');
+    ax = nexttile(tl);
+    hold(ax,'on'); box(ax,'on'); grid(ax,'on');
+    set(ax,'FontName','Times','FontSize',11,'LineWidth',0.9, ...
+        'TickLabelInterpreter','latex');
 
-fill_band(ax,r_lo,r_hi,ygrid,cfg);
+    fill_band(ax,r_lo,r_hi,ygrid,cfg);
 
-isP = mer_data.group == "Pseudomonas";
-isA = mer_data.group == "Acinetobacter";
-scatter(ax,mer_data.R(isP),yexp(isP),30,'o', ...
-    'MarkerFaceColor',[0.82 0.82 0.82],'MarkerEdgeColor','k', ...
-    'DisplayName','Pseudomonas');
-scatter(ax,mer_data.R(isA),yexp(isA),34,'s', ...
-    'MarkerFaceColor',[0.92 0.92 0.92],'MarkerEdgeColor','k', ...
-    'DisplayName','Acinetobacter');
+    isP = mer_data.group == "Pseudomonas";
+    isA = mer_data.group == "Acinetobacter";
+    scatter(ax,mer_data.R(isP),yexp(isP),24,'o', ...
+        'MarkerFaceColor',[0.82 0.82 0.82],'MarkerEdgeColor','k', ...
+        'HandleVisibility','off');
+    scatter(ax,mer_data.R(isA),yexp(isA),28,'s', ...
+        'MarkerFaceColor',[0.92 0.92 0.92],'MarkerEdgeColor','k', ...
+        'HandleVisibility','off');
 
-plot_branches(ax,r_fix,r_stop,use_fix,use_stop,ygrid);
+    plot_branches(ax,r_fix,r_stop,use_fix,use_stop,ygrid);
 
-joinRadius = sqrt(4*cfg.D0_mm2_min*60*cfg.tobs0_hr);
-xline(ax,joinRadius,':','Join','Interpreter','latex', ...
-    'HandleVisibility','off');
+    title(ax,['Varying ',sensitivity(p).name],'Interpreter','latex');
+    xlabel(ax,'ZOI radius (mm)','Interpreter','latex');
+    ylabel(ax,'$\log_{10}(MIC)~(\mu\mathrm{g/mL})$','Interpreter','latex');
+    xlim(ax,cfg.xlim_mm);
 
-xlabel(ax,'ZOI radius (mm)','Interpreter','latex');
-ylabel(ax,'$\log_{10}(MIC)~(\mu\mathrm{g/mL})$','Interpreter','latex');
-xlim(ax,cfg.xlim_mm);
-legend(ax,'Interpreter','latex','Location','southwest', ...
-    'FontSize',10,'Box','on');
-
-fprintf('Figure 4.2: fitted meropenem D_a* = %.7f mm^2/min\n',D_fit);
-fprintf('Figure 4.2: SSE = %.6g\n',sse_fit);
-fprintf('Figure 4.2: critical MIC = %.6g ug/mL\n',amincrit);
+    if p == 1
+        legend(ax,'Interpreter','latex','Location','southwest', ...
+            'FontSize',8,'Box','on');
+    end
+end
 
 %% Export
 
 scriptDir = fileparts(mfilename('fullpath'));
 outputDir = fullfile(scriptDir,'outputs');
 if ~exist(outputDir,'dir'); mkdir(outputDir); end
-safe_export_pdf(fig,fullfile(outputDir,'Figure_4_2.pdf'));
+safe_export_pdf(fig,fullfile(outputDir,'Figure_4_2a.pdf'));
 
-%% Local functions
+%% Figure 4.2b: ciprofloxacin
+% rng(10) for reproducibility
+rng(10);
 
-function R_all = sample_prediction_curves(cfg,amin_grid)
-% Sample diffusivity, observation time and effective loading together.
+%% Parameters and data
+
+cfg.drug_name = 'Ciprofloxacin';
+cfg.dose_ug = 5;
+cfg.agar_depth_mm = 4;
+cfg.D0_mm2_min = 2.4e-2;
+cfg.D_sensitivity_range_mm2_min = [0.5 1.5]*cfg.D0_mm2_min;
+cfg.Nsamp = 5000;
+cfg.ribbon_lo_pct = 5;
+cfg.ribbon_hi_pct = 95;
+cfg.Ncurve = 600;
+cfg.xlim_mm = [0 25];
+cfg.effective_loading_factor_range = [0.5 1.5];
+cfg.reference_loading_factor = mean(cfg.effective_loading_factor_range);
+cfg.tobs_mode = 'uniform';
+cfg.tobs_range_hr = [14 18];
+cfg.tobs0_hr = mean(cfg.tobs_range_hr);
+
+% Columns: [MIC (ug/mL), ZOI radius (mm), number of isolates]
+cip_compact = [
+0.016 16.5 1;
+0.016 17.5 3;
+0.016 18.0 7;
+0.016 18.5 6;
+0.016 19.0 6;
+0.016 19.5 6;
+0.016 20.0 6;
+0.016 20.5 3;
+0.016 21.0 4;
+0.016 21.5 1;
+0.016 22.0 1;
+
+0.032 17.0 1;
+0.032 17.5 1;
+0.032 18.0 2;
+0.032 18.5 6;
+0.032 19.0 3;
+0.032 20.0 5;
+0.032 20.5 2;
+0.032 21.0 2;
+
+0.064 14.5 1;
+0.064 15.0 1;
+0.064 15.5 2;
+0.064 16.5 2;
+0.064 17.0 1;
+0.064 17.5 2;
+0.064 18.0 1;
+0.064 18.5 1;
+0.064 19.0 1;
+0.064 20.0 1;
+
+0.125 14.5 3;
+0.125 15.5 8;
+0.125 16.0 3;
+0.125 16.5 2;
+0.125 17.0 2;
+0.125 18.5 1;
+
+0.25 13.0 1;
+0.25 13.5 2;
+0.25 14.0 4;
+0.25 14.5 9;
+0.25 15.0 7;
+0.25 15.5 4;
+0.25 16.0 1;
+0.25 16.5 1;
+
+0.5 13.0 1;
+0.5 14.5 1
+];
+
+cip_data.MIC = cip_compact(:,1);
+cip_data.R = cip_compact(:,2);
+cip_data.N = cip_compact(:,3);
+
+%% Fit the reference diffusivity
+
+[D_fit,sse_fit] = fit_diffusivity_to_radius( ...
+    cip_data.MIC,cip_data.R,cip_data.N, ...
+    cfg.dose_ug,cfg.agar_depth_mm,cfg.reference_loading_factor, ...
+    cfg.tobs0_hr,cfg.D_sensitivity_range_mm2_min);
+
+cfg.D0_mm2_min = D_fit;
+cfg.D_sensitivity_range_mm2_min = [0.5 1.5]*D_fit;
+
+fprintf('Figure 4.2b: fitted ciprofloxacin D_a* = %.7f mm^2/min\n',D_fit);
+fprintf('Figure 4.2b: weighted SSE = %.6g\n',sse_fit);
+
+%% Sensitivity panels
+
+amin_grid = make_amin_grid(cip_data.MIC,cfg.Ncurve);
+ygrid = log10(amin_grid);
+yexp = log10(cip_data.MIC);
+D0 = cfg.D0_mm2_min;
+t0_min = 60*cfg.tobs0_hr;
+sensitivity = make_sensitivity_definitions(cfg);
+
+fig = figure('Color','w','Units','centimeters','Position',[2 2 27 9]);
+tl = tiledlayout(fig,1,3,'TileSpacing','compact','Padding','compact');
+
+for p = 1:numel(sensitivity)
+    [R_all,r_fix,r_stop,use_fix,use_stop] = ...
+        sample_one_parameter_curves(cfg,amin_grid,sensitivity(p),D0,t0_min);
+
+    r_lo = prctile(R_all,cfg.ribbon_lo_pct,2);
+    r_hi = prctile(R_all,cfg.ribbon_hi_pct,2);
+
+    ax = nexttile(tl);
+    hold(ax,'on'); box(ax,'on'); grid(ax,'on');
+    set(ax,'FontName','Times','FontSize',11,'LineWidth',0.9, ...
+        'TickLabelInterpreter','latex');
+
+    fill_band(ax,r_lo,r_hi,ygrid,cfg);
+    scatter(ax,cip_data.R,yexp,40,cip_data.N,'s','filled', ...
+        'MarkerEdgeColor','k','HandleVisibility','off');
+    plot_branches(ax,r_fix,r_stop,use_fix,use_stop,ygrid);
+
+    title(ax,['Varying ',sensitivity(p).name],'Interpreter','latex');
+    xlabel(ax,'ZOI radius (mm)','Interpreter','latex');
+    ylabel(ax,'$\log_{10}(MIC)~(\mu\mathrm{g/mL})$','Interpreter','latex');
+    xlim(ax,cfg.xlim_mm);
+
+    if p == 1
+        legend(ax,'Interpreter','latex','Location','southwest', ...
+            'FontSize',8,'Box','on');
+    end
+end
+
+%% Export
+
+scriptDir = fileparts(mfilename('fullpath'));
+outputDir = fullfile(scriptDir,'outputs');
+if ~exist(outputDir,'dir'); mkdir(outputDir); end
+safe_export_pdf(fig,fullfile(outputDir,'Figure_4_2b.pdf'));
+
+%% Local functions used by both Figure 4.2 panels
+
+function sensitivity = make_sensitivity_definitions(cfg)
+% Define the one-at-a-time sampling used in the three panels.
+
+    sensitivity(1).name = '$D_a^*$';
+    sensitivity(1).type = 'D';
+    sensitivity(1).sampling = 'loguniform';
+    sensitivity(1).range = cfg.D_sensitivity_range_mm2_min;
+
+    sensitivity(2).name = '$t_{\mathrm{obs}}^*$';
+    sensitivity(2).type = 't';
+    if strcmp(cfg.tobs_mode,'discrete')
+        sensitivity(2).sampling = 'discrete';
+        sensitivity(2).values = 60*cfg.tobs_values_hr;
+    else
+        sensitivity(2).sampling = 'uniform';
+        sensitivity(2).range = 60*cfg.tobs_range_hr;
+    end
+
+    sensitivity(3).name = 'effective loading';
+    sensitivity(3).type = 'dosefactor';
+    sensitivity(3).sampling = 'uniform';
+    sensitivity(3).range = cfg.effective_loading_factor_range;
+end
+
+function [R_all,r_fix_base,r_stop_base,use_fix_base,use_stop_base] = ...
+    sample_one_parameter_curves(cfg,amin_grid,sensitivity,D0,t0_min)
 
     R_all = nan(numel(amin_grid),cfg.Nsamp);
+    dose_ref_ug = cfg.dose_ug*cfg.reference_loading_factor;
+
+    [~,r_fix_base,r_stop_base,use_fix_base,use_stop_base] = ...
+        combined_curve_physical(amin_grid,dose_ref_ug, ...
+        cfg.agar_depth_mm,D0,t0_min);
 
     for j = 1:cfg.Nsamp
-        D_j = 10.^unifrnd(log10(cfg.D_sensitivity_range_mm2_min(1)), ...
-            log10(cfg.D_sensitivity_range_mm2_min(2)));
+        dose_j = dose_ref_ug;
+        D_j = D0;
+        t_j = t0_min;
+        sampled_value = sample_sensitivity_value(sensitivity);
 
-        if strcmp(cfg.tobs_mode,'discrete')
-            tobs_hr = cfg.tobs_values_hr(randi(numel(cfg.tobs_values_hr)));
-        elseif strcmp(cfg.tobs_mode,'uniform')
-            tobs_hr = unifrnd(cfg.tobs_range_hr(1),cfg.tobs_range_hr(2));
-        else
-            error('Unknown tobs_mode: %s',cfg.tobs_mode);
+        switch sensitivity.type
+            case 'D'
+                D_j = sampled_value;
+            case 't'
+                t_j = sampled_value;
+            case 'dosefactor'
+                dose_j = cfg.dose_ug*sampled_value;
+            otherwise
+                error('Unknown sensitivity type: %s',sensitivity.type);
         end
 
-        loading_factor = unifrnd(cfg.effective_loading_factor_range(1), ...
-            cfg.effective_loading_factor_range(2));
-        dose_j = cfg.dose_ug*loading_factor;
-
         R_all(:,j) = combined_curve_physical(amin_grid,dose_j, ...
-            cfg.agar_depth_mm,D_j,60*tobs_hr);
+            cfg.agar_depth_mm,D_j,t_j);
+    end
+end
+
+function value = sample_sensitivity_value(sensitivity)
+
+    switch sensitivity.sampling
+        case 'loguniform'
+            value = 10.^unifrnd(log10(sensitivity.range(1)), ...
+                log10(sensitivity.range(2)));
+        case 'uniform'
+            value = unifrnd(sensitivity.range(1),sensitivity.range(2));
+        case 'discrete'
+            value = sensitivity.values(randi(numel(sensitivity.values)));
+        otherwise
+            error('Unknown sampling mode: %s',sensitivity.sampling);
     end
 end
 
@@ -284,4 +486,3 @@ function safe_export_pdf(fig,pdf_name)
         print(fig,pdf_name,'-dpdf','-r300');
     end
 end
-

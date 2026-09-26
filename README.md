@@ -1,43 +1,57 @@
-# wound-biofilm-zoi
-Contains the MATLAB scripts used to generate the figures in:
+# MATLAB code for ZOI model figures
 
-**Revisiting the zone of inhibition experiments for antimicrobial susceptibility: a diffusion-limited hole opening problem**
+This repository contains the MATLAB scripts used to generate the computational figures for the accompanying paper.
 
-
-Each script is self-contained and corresponds to a numbered figure in the paper.
-
-## Abstract
-
-...
+Each script is self-contained and can be run independently. Generated figures are saved to the `outputs` directory.
 
 ## Files
 
-| File | Paper Figure | Description |
-|:---:|:---:|:---|
-| 'figure_2_1.m' | Figure 2.1 | Antimicrobial concentration profiles for the infinite-domain Dirac initial condition at selected times. |
-| 'figure_2_2.m' | Figure 2.2 | Comparison of the MIC level curves for the four combinations of initial condition and domain size. |
-| 'figure_2_3.m' | Figure 2.3 | Finite-domain level curves for several domain radii, for both Dirac and Heaviside initial conditions. |
-| 'figure_3_1.m' | Figure 3.1 | Bacterial density profiles at selected times for fixed bacterial death parameter. |
-| 'figure_3_2.m' | Figure 3.1 | Bacterial density profiles at for several values of the bacterial death parameter. |
-| 'figure_4_1.m' | Figure 4.1 | One at a time sensitivity analysis for the meropenem data. |
-| 'figure_4_2.m' | Figure 4.2 | Model fit and uncertainty band for the meropenem data. |
-| 'figure_4_3.m' | Figure 4.3 | One at a time sensitivity analysis for the ciprofloxacin data. |
-| 'figure_4_4.m' | Figure 4.4 | Model fit and uncertainty band for the ciprofloxacin data. |
-
-The 'outputs' folder is used for the generated PDF files.
+| File | Figure |
+|---|---:|
+| `figure_2_1.m` | Figures 2.1a–b |
+| `figure_2_2.m` | Figure 2.2 |
+| `figure_2_3.m` | Figure 2.3 |
+| `figure_3_1.m` | Figures 3.1a–d |
+| `figure_3_2.m` | Figures 3.2a–b |
+| `figure_3_3.m` | Figures 3.3a–b |
+| `figure_4_2.m` | Figures 4.2a–b |
 
 ## Requirements
 
-The scripts require MATLAB R2016b or later. The following toolboxes are required:
+The scripts require MATLAB with support for local functions in scripts.
 
-- **Communications Toolbox** for 'marcumq' in Figures 3.1 and 3.2
-- **Optimization Toolbox** for 'fsolve' in Figures 3.1 and 3.2
-- **Statistics and Machine Learning Toolbox** for 'unifrns' and 'prctile' in Figures 4.1--4.4
+The following toolboxes are required:
 
-## Data and modelling notes
+- **Optimization Toolbox** for `fsolve`;
+- **Communications Toolbox** for `marcumq`;
+- **Statistics and Machine Learning Toolbox** for functions including `prctile` and random sampling used in the sensitivity analysis.
 
-The experimental values used in Figures 4.1--4.4 are included directly in the relevant scripts. They were transcribed from the studies cited in the manuscript.
+## Running the code
+
+Open MATLAB, set the current folder to the repository directory, and run the desired script. For example:
+
+```matlab
+figure_3_1
+```
+
+or
+
+```matlab
+run('figure_3_1.m')
+```
+
+The required `outputs` directory is created automatically if it does not already exist.
+
+Scripts containing multiple manuscript panels export each panel as a separate PDF file.
 
 ## Citation
 
-...
+Please cite the accompanying paper when using this code:
+
+> Patterson, A. C., Bradshaw-Hajek, B. H., Murphy, R. J., Bunder, J. E., Venn, X. L., and Tam, A. K. Y.  
+> *Revisiting the zone of inhibition experiments for antimicrobial susceptibility: a diffusion-limited hole opening problem*.
+
+## Contact
+
+Alexander K. Y. Tam  
+alexander.tam@adelaide.edu.au
