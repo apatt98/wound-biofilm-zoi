@@ -14,6 +14,7 @@ Each script is self-contained and can be run independently. Generated figures ar
 | `figure_3_1.m` | Figures 3.1a–d |
 | `figure_3_2.m` | Figures 3.2a–b |
 | `figure_3_3.m` | Figures 3.3a–b |
+| `figure_4_1.m` | Figures 4.1a-b |
 | `figure_4_2.m` | Figures 4.2a–b |
 | `figure_D_1.m` | Figures D.1a–b |
 
